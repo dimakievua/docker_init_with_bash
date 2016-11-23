@@ -1,10 +1,22 @@
 #!/bin/bash
 OPTIONS="Create Status Delete Quit"
+REPO_PATH=/etc/yum.repos.d/docker.repo
+HELLO=Hello 
+
+function hello {
+  local HELLO=World
+  echo $HELLO
+}
+
 select opt in $OPTIONS; do
   case $opt in
     "Create")
       echo "Enter number of web instances NGINX:"
       read WEB
+      while [[ $WEB != *[!0-9]* ]]; do
+        echo "'$WEB' has a non-digit somewhere in it. Please try again."
+        read WEB 
+      done
       echo "Enter number of db instances in Galera cluster:"
       read DB
       echo "Enter number of control container:"
@@ -15,7 +27,13 @@ select opt in $OPTIONS; do
       echo "Confirm or discard (y/n):"
       read CONFIRM
       if [ "$CONFIRM" = "y" ]; then
+        echo $HELLO
+        hello
+        echo $HELLO        
+        echo ls
+        echo $(ls)
         echo Created!
+
       else
         echo Discarded!
       fi
