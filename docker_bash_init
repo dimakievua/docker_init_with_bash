@@ -2,28 +2,57 @@
 OPTIONS="Create Status Delete Quit"
 REPO_PATH=/etc/yum.repos.d/docker.repo
 HELLO=Hello 
+HOST_FILE=/home/ec2-user/ansible/config/hosts
+ANSIBLE_DIR=/tmp/config
+SSH_KEY=/root/.ssh/id_rsa
+AUTH_KEYS=/home/ec2-user/ansible/authorized_keys
+DB_PATH=/home/ec2-user/ansible/database
+DB_ROOT_PW=secret
+IMAGE="openssh-server:latest"
 
 function hello {
   local HELLO=World
   echo $HELLO
 }
 
+function checkvar()
+{
+    local  __resultvar=$1
+    while ! [[ $myresult = [0-9] ]]; do
+      if [[ -n $myresult ]]; then
+        echo "'$__resultvar' has a non-digit somewhere in it. Please try again."
+      fi
+        read myresult
+    done
+    eval $__resultvar="'$myresult'"
+    unset myresult
+}
+
 select opt in $OPTIONS; do
   case $opt in
     "Create")
       echo "Enter number of web instances NGINX:"
-      read WEB
-      while [[ $WEB != *[!0-9]* ]]; do
-        echo "'$WEB' has a non-digit somewhere in it. Please try again."
-        read WEB 
-      done
+      checkvar WEB
       echo "Enter number of db instances in Galera cluster:"
-      read DB
+      checkvar DB
       echo "Enter number of control container:"
-      read CON
+      checkvar CON
       echo "Use default parameters (y/n)"
       read DEF
+      if [[ $DEF == "n" || $DEF == "N" ]]; then
+        echo "Sorry, but still default parameters will be used!"
+      else
+        echo "Default parameters will be used!"
+      fi
       echo "Next containers will be created: web - $WEB, MariaDB - $DB, control - $CON."
+      echo "DB container settings:"
+      for i in $DB; do
+            echo echo "Host path to database: $DB_PATH/$i"
+      done
+      echo "Container path to database: /var/lib/mysql"
+      echo "Root password: $DB_ROOT_PW"
+      echo "Image: $IMAGE"
+#      echo "Test: docker run -v $DB_PATH/$i:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=$DB_ROOT_PW --name=gdb$i -d -ti dockerbase/$IMAGE /bin/bash"
       echo "Confirm or discard (y/n):"
       read CONFIRM
       if [ "$CONFIRM" = "y" ]; then
@@ -33,6 +62,7 @@ select opt in $OPTIONS; do
         echo ls
         echo $(ls)
         echo Created!
+
 
       else
         echo Discarded!
