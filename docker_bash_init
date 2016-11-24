@@ -9,11 +9,7 @@ AUTH_KEYS=/home/ec2-user/ansible/authorized_keys
 DB_PATH=/home/ec2-user/ansible/database
 DB_ROOT_PW=secret
 IMAGE="openssh-server:latest"
-
-function hello {
-  local HELLO=World
-  echo $HELLO
-}
+WEB_CONTENT=/home/ec2-user/ansible/config/roles/web/files/html
 
 function checkvar()
 {
@@ -28,6 +24,25 @@ function checkvar()
     unset myresult
 }
 
+function prepare()
+{
+  if [ ! -f "/etc/yum.repos.d/docker.repo" ]
+  then 
+    touch /etc/yum.repos.d/docker.repo
+    echo [dockerrepo] >> /etc/yum.repos.d/docker.repo
+    echo name=Docker Repository >> /etc/yum.repos.d/docker.repo
+    echo baseurl=https://yum.dockerproject.org/repo/main/centos/7/ >> /etc/yum.repos.d/docker.repo
+    echo enabled=1 >> /etc/yum.repos.d/docker.repo
+    echo gpgcheck=1 >> /etc/yum.repos.d/docker.repo
+    echo gpgkey=https://yum.dockerproject.org/gpg >> /etc/yum.repos.d/docker.repo
+  fi
+  yum update
+  yum install docker-engine
+  systemctl enable docker.service
+  systemctl start docker
+  sudo usermod -aG docker ec2-user
+}
+
 select opt in $OPTIONS; do
   case $opt in
     "Create")
@@ -40,30 +55,65 @@ select opt in $OPTIONS; do
       echo "Use default parameters (y/n)"
       read DEF
       if [[ $DEF == "n" || $DEF == "N" ]]; then
-        echo "Sorry, but still default parameters will be used!"
+        echo "Please enter your parameters:"
+        echo "Folder to store database on host: "
+        read $DB_PATH
+        echo "MariaDB root password: "
+        read $DB_ROOT_PW
+        echo "Docker images that will be used: "
+        read $IMAGE
+        echo "folder on control host with Ansible project: "
+        read $ANSIBLE_DIR
+        echo "Use default parameters (y/n)"
       else
-        echo "Default parameters will be used!"
+        echo "Default parameters will be used."
+        echo "Database containers:"
+        echo "Folder to store database on host: $DB_PATH, container path to database: /var/lib/mysql, DB root password: $DB_ROOT_PW"
+        echo "Web containers:"
+        echo "Folder to store website on host: $WEB_CONTENT, container path to database: /var/www/html"
+        echo "Control containers:"
+        echo "Docker images that will be used: $IMAGE and folder on control host with Ansible project: $ANSIBLE_DIR"
       fi
       echo "Next containers will be created: web - $WEB, MariaDB - $DB, control - $CON."
-      echo "DB container settings:"
-      for i in $DB; do
-            echo echo "Host path to database: $DB_PATH/$i"
-      done
-      echo "Container path to database: /var/lib/mysql"
-      echo "Root password: $DB_ROOT_PW"
-      echo "Image: $IMAGE"
-#      echo "Test: docker run -v $DB_PATH/$i:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=$DB_ROOT_PW --name=gdb$i -d -ti dockerbase/$IMAGE /bin/bash"
       echo "Confirm or discard (y/n):"
       read CONFIRM
       if [ "$CONFIRM" = "y" ]; then
-        echo $HELLO
-        hello
-        echo $HELLO        
-        echo ls
-        echo $(ls)
+        echo "DB container creation:"
+        for i in $DB; do
+          if [ ! -d "$DB_PATH/$i" ]; then
+            mkdir $DB_PATH/$i
+          fi
+          if [ docker ps -a | grep -w "dgb$i" ]; then          
+            echo "Container exists. Please delete it first."
+          else  
+            echo "docker run -v $DB_PATH/$i:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=$DB_ROOT_PW --name=gdb$i -d -ti dockerbase/$IMAGE /bin/bash"
+            GDBS="$GDBS gdb$i"
+          fi  
+        done
+        unset i
+        for i in $WEB; do
+          if [ ! -d "$WEB_CONTENT" ]; then
+            echo "Web content is missing. Please check path and try again."
+          fi
+          if [ docker ps -a | grep -w "web$i" ]; then          
+            echo "Container exists. Please delete it first."
+          else  
+            echo "docker run -v $WEB_CONTENT:/var/www/html --name=web$i --link $GDBS -d -ti dockerbase/openssh-server:latest /bin/bash"
+            WEBS="$WEB gdb$i"
+          fi           
+        done
+        unset i    
+        echo "DBs - $GDBS and WEBs - $WEBS"
+# check for existence of our base image
+# shell: "docker ps -a | grep -w web"
+#        
+#        for i in $CON; do
+#          if [ ! -d "$DB_PATH/$i" ]; then
+#            mkdir $DB_PATH/$i
+#          fi
+#          echo "docker run -v $DB_PATH/$i:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=$DB_ROOT_PW --name=gdb$i -d -ti dockerbase/$IMAGE /bin/bash"
+#        done       
         echo Created!
-
-
       else
         echo Discarded!
       fi
