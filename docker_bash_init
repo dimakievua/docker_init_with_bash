@@ -3,6 +3,7 @@ OPTIONS="Create Status Delete Quit"
 REPO_PATH=/etc/yum.repos.d/docker.repo
 HELLO=Hello 
 HOST_FILE=/home/ec2-user/ansible/config/hosts
+ANS_CONTENT=/home/ec2-user/ansible
 ANSIBLE_DIR=/tmp/config
 SSH_KEY=/root/.ssh/id_rsa
 AUTH_KEYS=/home/ec2-user/ansible/authorized_keys
@@ -50,8 +51,6 @@ select opt in $OPTIONS; do
       checkvar WEB
       echo "Enter number of db instances in Galera cluster:"
       checkvar DB
-      echo "Enter number of control container:"
-      checkvar CON
       echo "Use default parameters (y/n)"
       read DEF
       if [[ $DEF == "n" || $DEF == "N" ]]; then
@@ -79,40 +78,48 @@ select opt in $OPTIONS; do
       read CONFIRM
       if [ "$CONFIRM" = "y" ]; then
         echo "DB container creation:"
-        for i in $DB; do
-          if [ ! -d "$DB_PATH/$i" ]; then
-            mkdir $DB_PATH/$i
-          fi
-          if [ docker ps -a | grep -w "dgb$i" ]; then          
-            echo "Container exists. Please delete it first."
-          else  
-            echo "docker run -v $DB_PATH/$i:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=$DB_ROOT_PW --name=gdb$i -d -ti dockerbase/$IMAGE /bin/bash"
+        let i=1
+        if [ $DB -gt 0 ]; then
+          while [ $i -le $DB ]; do
+            if [ ! -d "$DB_PATH/$i" ]; then
+              mkdir $DB_PATH/$i
+            fi
+            if [[ $(docker ps -a | grep -w "gdb$i") ]]; then          
+              echo "gdb$i container exists. Please delete it first."
+            else  
+              echo "docker run -v $DB_PATH/$i:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=$DB_ROOT_PW --name=gdb$i -d -ti dockerbase/$IMAGE /bin/bash"
+            fi 
             GDBS="$GDBS gdb$i"
-          fi  
-        done
+            let i=$i+1
+          done
+        fi
         unset i
-        for i in $WEB; do
-          if [ ! -d "$WEB_CONTENT" ]; then
-            echo "Web content is missing. Please check path and try again."
-          fi
-          if [ docker ps -a | grep -w "web$i" ]; then          
-            echo "Container exists. Please delete it first."
-          else  
-            echo "docker run -v $WEB_CONTENT:/var/www/html --name=web$i --link $GDBS -d -ti dockerbase/openssh-server:latest /bin/bash"
-            WEBS="$WEB gdb$i"
-          fi           
-        done
+        if [ $WEB -gt 0 ]; then
+          let i=1
+          while [ $i -le $WEB ]; do
+            if [ ! -d "$WEB_CONTENT" ]; then
+              echo "Web content is missing. Please check path and try again."
+            else
+              if [[ $(docker ps -a | grep -w "web$i") ]]; then
+                echo "web$i container exists. Please delete it first."
+              else
+                echo "docker run -v $WEB_CONTENT:/var/www/html --name=web$i --link $GDBS -d -ti dockerbase/openssh-server:latest /bin/bash"
+              fi           
+              WEBS="$WEBS web$i"
+              let i=$i+1
+            fi
+          done
+        fi
         unset i    
-        echo "DBs - $GDBS and WEBs - $WEBS"
-# check for existence of our base image
-# shell: "docker ps -a | grep -w web"
-#        
-#        for i in $CON; do
-#          if [ ! -d "$DB_PATH/$i" ]; then
-#            mkdir $DB_PATH/$i
-#          fi
-#          echo "docker run -v $DB_PATH/$i:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=$DB_ROOT_PW --name=gdb$i -d -ti dockerbase/$IMAGE /bin/bash"
-#        done       
+        if [ ! -d "$ANS_CONTENT" ]; then
+          echo "Web content is missing. Please check path and try again."
+        else
+          if [[ $(docker ps -a | grep -w "ansible") ]]; then
+            echo "Container exists. Please delete it first."
+          else
+            echo "docker run --name=ansible -v $ANS_CONTENT/config:$ANSIBLE_DIR --link $GDBS --link $WEBS -d -ti dockerbase/openssh-server:latest /bin/bash"
+          fi
+        fi
         echo Created!
       else
         echo Discarded!
